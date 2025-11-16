@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deccan Express Simulator - Highly Accessible Train Game (Tone.js Audio)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Include Tone.js for advanced sound generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script> 
+    <style>
+        /* Custom styles for aesthetic and focus visibility */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        :root {
+            --rail-blue: #1c3d5a;
+            --signal-green: #34d399;
+            --warning-red: #f87171;
+            --ir-gold: #f39c12;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            color: #1f2937;
+            padding: 1rem;
+        }
+        .control-panel {
+            background: #ffffff;
+            border: 2px solid var(--rail-blue);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+        }
+        .btn-control, .btn-action {
+            transition: all 0.1s;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+            font-weight: 700;
+        }
+        /* High-visibility focus rings for accessibility */
+        .btn-control:focus-visible, .btn-action:focus-visible, 
+        select:focus-visible, button:focus-visible {
+            outline: 4px solid var(--signal-green);
+            outline-offset: 2px;
+            box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.5);
+        }
+        .gauge-label {
+            display: block;
+            font-weight: 700;
+            color: var(--rail-blue);
+        }
+
+        /* Custom sound bar visualization */
+        .sound-bar {
+            height: 10px;
+            background: linear-gradient(90deg, var(--ir-gold) 0%, #3b82f6 100%);
+            border-radius: 5px;
+            transition: width 0.1s linear;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center">
+
+    <div id="game-container" class="w-full max-w-4xl space-y-6">
+
+        <h1 class="text-3xl font-extrabold text-center text-gray-800">Deccan Express Simulator (Tone.js Audio)</h1>
+        <p class="text-center text-sm text-gray-500">A fully accessible train simulation with advanced audio</p>
+
+        <!-- ARIA LIVE REGION: Control Room & Accessibility Announcements -->
+        <div id="announcement-area" aria-live="polite" class="p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 rounded-lg shadow-md font-mono text-sm min-h-[4em]">
+            <span id="announcement-text">Welcome, Driver. Please select a route and click 'Start Simulation'.</span>
+        </div>
+
+        <!-- Game Interface -->
+        <div id="game-interface" class="control-panel p-6 rounded-xl space-y-6">
+
+            <!-- Initial Setup / Route Selection -->
+            <div id="initial-setup" class="space-y-4">
+                <label for="route-selector" class="gauge-label text-lg">Select Route:</label>
+                <div class="flex flex-col md:flex-row items-center space-y-2 md:space-y-0 md:space-x-4">
+                    <select id="route-selector" aria-label="Select the train route" class="p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 w-full md:w-1/2">
+                        <option value="LPI_SC">Lingampally (LPI) to Secunderabad (SC)</option>
+                        <option value="SC_LPI">Secunderabad (SC) to Lingampally (LPI)</option>
+                    </select>
+                    <button id="start-button" onclick="startGame()" class="btn-action bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg w-full md:w-1/2">
+                        Start Simulation
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dashboard -->
+            <div id="dashboard" class="hidden grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                <div class="p-4 bg-blue-100 rounded-lg">
+                    <span class="gauge-label">CURRENT SPEED (Km/h)</span>
+                    <div id="speed-display" class="text-4xl font-bold text-blue-800">0</div>
+                </div>
+                <div class="p-4 bg-gray-100 rounded-lg">
+                    <span class="gauge-label">CURRENT STATION</span>
+                    <div id="current-station-display" class="text-xl font-semibold text-gray-700">--</div>
+                </div>
+                <div class="p-4 bg-blue-100 rounded-lg">
+                    <span class="gauge-label">DISTANCE TO NEXT STOP (km)</span>
+                    <div id="distance-display" class="text-4xl font-bold text-blue-800">--</div>
+                </div>
+            </div>
+
+            <!-- Controls (Button Navigation Only) -->
+            <div id="controls-section" class="hidden space-y-6">
+                <h2 class="text-xl font-bold text-gray-700 border-b pb-2">Train Controls</h2>
+
+                <!-- Throttle Control -->
+                <div class="flex flex-col md:flex-row items-center space-y-3 md:space-y-0 md:space-x-6 bg-gray-50 p-4 rounded-lg">
+                    <span class="gauge-label w-full md:w-1/4 text-left">THROTTLE (<span id="throttle-notch-display">N0</span>)</span>
+                    <div class="flex space-x-2 w-full md:w-auto">
+                        <button onclick="changeThrottle(-1)" aria-label="Decrease Throttle Notch" class="btn-control bg-red-500 hover:bg-red-600 text-white w-16 h-12 rounded-lg text-2xl" disabled id="throttle-down-button">-</button>
+                        <button onclick="changeThrottle(1)" aria-label="Increase Throttle Notch" class="btn-control bg-green-500 hover:bg-green-600 text-white w-16 h-12 rounded-lg text-2xl" disabled id="throttle-up-button">+</button>
+                    </div>
+                    <span class="text-sm text-gray-500 ml-4 hidden md:block">Max: N8. Controls acceleration.</span>
+                </div>
+
+                <!-- Brake Control -->
+                <div class="flex flex-col md:flex-row items-center space-y-3 md:space-y-0 md:space-x-6 bg-gray-50 p-4 rounded-lg">
+                    <span class="gauge-label w-full md:w-1/4 text-left">BRAKE (<span id="brake-notch-display">B0</span>)</span>
+                    <div class="flex space-x-2 w-full md:w-auto">
+                        <button onclick="changeBrake(-1)" aria-label="Decrease Brake Application" class="btn-control bg-green-500 hover:bg-green-600 text-white w-16 h-12 rounded-lg text-2xl" disabled id="brake-down-button">-</button>
+                        <button onclick="changeBrake(1)" aria-label="Increase Brake Application" class="btn-control bg-red-500 hover:bg-red-600 text-white w-16 h-12 rounded-lg text-2xl" disabled id="brake-up-button">+</button>
+                    </div>
+                    <span class="text-sm text-gray-500 ml-4 hidden md:block">Max: B5. Controls deceleration.</span>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="flex justify-between space-x-4 pt-4">
+                    <button id="horn-button" onclick="playHorn()" aria-label="Activate Train Horn" class="btn-action bg-yellow-500 hover:bg-yellow-600 text-gray-900 flex-1 p-3 rounded-lg disabled:opacity-50" disabled>
+                        HORN
+                    </button>
+                    <!-- UPDATE: Reset button is now separate to prevent being hidden on game over -->
+                    <button id="reset-button" onclick="resetGame()" aria-label="Reset the Simulation" class="btn-action bg-gray-500 hover:bg-gray-600 text-white flex-1 p-3 rounded-lg disabled:opacity-50" disabled>
+                        RESET
+                    </button>
+                </div>
+
+                <!-- Sound Visualization -->
+                <div class="pt-4 space-y-2">
+                    <span class="gauge-label">TRACTION SOUND INTENSITY (Visual Feedback)</span>
+                    <div id="sound-viz" class="sound-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Traction sound intensity, proportional to train speed." style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Game Status -->
+            <div id="status-message" class="p-4 mt-4 text-center text-lg font-bold text-gray-700 bg-white rounded-lg border">
+                Current Status: Waiting for Start.
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS AND CONFIGURATION ---
+
+        // Firebase-like App ID (Required for canvas environment)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'deccan-express-sim-id';
+
+        // Real Distance (km) between LPI and SC common MMTS stops
+        const STATIONS_LPI_TO_SC = [
+            { name: "Lingampally (LPI)", realKm: 0 },
+            { name: "Chandranagar (CNNA)", realKm: 4 }, 
+            { name: "Hi-Tec City (HTCY)", realKm: 8 },  
+            { name: "Borabanda (BRBD)", realKm: 12 }, 
+            { name: "Fathehnagar (FNB)", realKm: 15 }, 
+            { name: "Begumpet (BMT)", realKm: 18 },   
+            { name: "Necklace Road (NLR)", realKm: 21 }, 
+            { name: "Secunderabad (SC)", realKm: 25 }  
+        ];
+
+        // --- UPDATED PLAYABILITY SETTINGS ---
+        // Scaling Factor: 1 km (Real) = 100 m (Simulated distance)
+        // Original was 10, which made the station zones impossibly small.
+        const DISTANCE_SCALE = 100;
+        
+        // The effective station zone radius in REAL km. 
+        // 0.25km radius = 0.5km total platform length.
+        // This makes stopping much more achievable.
+        const STATION_ZONE_RADIUS_KM = 0.25;
+
+        // Game Loop Update Rate (ms)
+        const UPDATE_INTERVAL_MS = 50;
+        const ANNOUNCEMENT_INTERVAL_MS = 10000; // 10 seconds
+
+        // Max Speed and Controls
+        const MAX_SPEED_KMH = 100;
+        const MAX_THROTTLE = 8;
+        const MAX_BRAKE = 5;
+
+        // Acceleration/Deceleration Factors
+        const ACCELERATION_PER_NOTCH = 0.05; // km/h per update interval per notch
+        const DECELERATION_PER_NOTCH = 0.15; // km/h per update interval per notch
+        const COASTING_DECELERATION = 0.005; // Natural friction
+
+        // --- GAME STATE VARIABLES ---
+        let gameState = {
+            currentSpeedKmH: 0,
+            currentDistanceM: 0, 
+            throttleNotch: 0,
+            brakeNotch: 0,
+            isSimulationRunning: false,
+            routeStations: [],
+            currentStationIndex: 0,
+            simLoopId: null,
+            announcementLoopId: null,
+            lastProximityKm: null,
+            nextStationDistanceKm: 0,
+        };
+
+        // --- TONE.JS AUDIO VARIABLES ---
+        let trackSynth, hornSynth, brakeNoise;
+        let trackLoop;
+
+
+        // --- DOM REFERENCES ---
+        const $ = id => document.getElementById(id);
+
+        const $announcementText = $('announcement-text');
+        const $speedDisplay = $('speed-display');
+        const $currentStationDisplay = $('current-station-display');
+        const $distanceDisplay = $('distance-display');
+        const $throttleNotchDisplay = $('throttle-notch-display');
+        const $brakeNotchDisplay = $('brake-notch-display');
+        const $statusMessage = $('status-message');
+        const $initialSetup = $('initial-setup');
+        const $dashboard = $('dashboard');
+        const $controlsSection = $('controls-section');
+        const $routeSelector = $('route-selector');
+        const $soundViz = $('sound-viz');
+        const $startButton = $('start-button');
+        const $resetButton = $('reset-button');
+        const $hornButton = $('horn-button');
+
+        // --- ACCESSIBILITY AND AUDIO FUNCTIONS ---
+
+        /**
+         * Announces text using the ARIA live region (Control Room voice).
+         * @param {string} text - The text to announce.
+         */
+        function announce(text) {
+            $announcementText.textContent = `[Control Room] ${text}`;
+        }
+
+        /**
+         * Initializes Tone.js advanced synths for realistic sound simulation.
+         * Creates NEW synths and transport every time the game starts.
+         */
+        function setupAudio() {
+            // Dispose of previous synths/loops if they exist
+            if (trackSynth) trackSynth.dispose();
+            if (hornSynth) hornSynth.dispose();
+            if (brakeNoise) brakeNoise.dispose();
+            if (trackLoop) trackLoop.dispose();
+            
+            // Train Movement (Rhythmic track noise + low hum)
+            trackSynth = new Tone.NoiseSynth({
+                noise: { type: "brown" }, // Use brown noise for a deeper rumble
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0.0, release: 0.1 },
+                volume: -30 // Start very quiet
+            }).toDestination();
+            
+            // Powerful Horn (Two detuned square waves for a massive, realistic blast)
+            hornSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "square" },
+                detune: 5, 
+                envelope: { attack: 0.1, decay: 0.5, sustain: 0.8, release: 0.5 },
+                volume: -2 
+            }).toDestination();
+
+            // Air Brake Hiss (White noise with a sharper, higher filter cutoff)
+            const filter = new Tone.Filter(800, "lowpass").toDestination();
+            brakeNoise = new Tone.Noise("white").connect(filter);
+            brakeNoise.volume.value = -Infinity; 
+            brakeNoise.start();
+
+            // Rhythmic loop for track 'click-clack'
+            // The speed will be controlled by Tone.Transport.bpm
+            trackLoop = new Tone.Loop(time => {
+                // Volume ramped in updateTractionSound based on speed
+                trackSynth.triggerAttackRelease("16n", time);
+                trackSynth.triggerAttackRelease("16n", time + Tone.Time("8n")); // Click-clack rhythm
+            }, "4n").start(0); 
+            
+            Tone.Transport.bpm.value = 100; // Initial BPM
+            // Tone.Transport.start() will be called in startGame()
+            
+            console.log("Tone.js Audio context initialized with new synths.");
+        }
+
+        /**
+         * Updates the traction sound pitch and volume based on speed and throttle.
+         */
+        function updateTractionSound() {
+            if (Tone.context.state !== 'running' || !trackSynth || !trackLoop) return;
+
+            const speed = gameState.currentSpeedKmH;
+            const maxSpeed = MAX_SPEED_KMH;
+            const throttle = gameState.throttleNotch;
+
+            // 1. Update Track Rhythm (BPM) based on speed
+            // BPM scales linearly with speed
+            Tone.Transport.bpm.value = Math.max(80, speed * 1.5); 
+
+            // 2. Update Track Volume (trackSynth)
+            // Volume is a minimum of -30dB, and increases with speed and throttle application
+            let targetVol = -30;
+            if (speed > 5) {
+                // Base volume scales up to -10dB at max speed
+                targetVol = -30 + Math.min(20, (speed / maxSpeed) * 20);
+                
+                // Add a small boost when accelerating (throttle > 0)
+                if (throttle > 0) {
+                    targetVol += throttle * 0.5;
+                }
+            }
+            trackSynth.volume.rampTo(targetVol, 0.1);
+
+
+            // 3. Update Brake Sound (if brake is applied)
+            if (gameState.brakeNotch > 0 && speed > 2) {
+                // Volume scales with brake notch, up to -5dB
+                const brakeVol = -20 + (gameState.brakeNotch / MAX_BRAKE) * 15;
+                brakeNoise.volume.rampTo(brakeVol, 0.1); 
+            } else {
+                brakeNoise.volume.rampTo(-Infinity, 0.2); 
+            }
+
+
+            // Update visual sound bar for sound-impaired users (proportional to speed)
+            const intensity = Math.round((speed / maxSpeed) * 100);
+            $soundViz.style.width = `${intensity}%`;
+            $soundViz.setAttribute('aria-valuenow', intensity);
+        }
+
+        /**
+         * Plays the horn sound using Tone.js.
+         */
+        function playHorn() {
+            // Note: Tone.start() is handled in startGame(). We assume context is running here.
+            if (!hornSynth) return;
+            // Use a low, powerful chord for a typical Indian Railway horn sound
+            const pitch = ["C3", "E3", "G3"];
+            hornSynth.triggerAttackRelease(pitch, "0.7"); // Sustained blast
+            announce("Train horn activated.");
+        }
+
+
+        // --- GAME CONTROL FUNCTIONS ---
+
+        function changeThrottle(delta) {
+            if (!gameState.isSimulationRunning) return;
+            gameState.throttleNotch = Math.min(MAX_THROTTLE, Math.max(0, gameState.throttleNotch + delta));
+            $throttleNotchDisplay.textContent = `N${gameState.throttleNotch}`;
+            announce(`Throttle changed to Notch ${gameState.throttleNotch}.`);
+        }
+
+        function changeBrake(delta) {
+            if (!gameState.isSimulationRunning) return;
+            gameState.brakeNotch = Math.min(MAX_BRAKE, Math.max(0, gameState.brakeNotch + delta));
+            $brakeNotchDisplay.textContent = `B${gameState.brakeNotch}`;
+            announce(`Brake pressure changed to Notch ${gameState.brakeNotch}.`);
+            // Trigger an immediate sound update to respond to braking action
+            updateTractionSound();
+        }
+
+        // --- GAME LOGIC ---
+
+        /**
+         * Initializes the game state and UI for the selected route.
+         */
+        function startGame() {
+            if (gameState.isSimulationRunning) return;
+
+            // 1. Initialise Audio and Resume Context
+            setupAudio(); // Creates new synths and loop every time
+            
+            // Start the audio context and transport on the first user action
+            if (Tone.context.state !== 'running') {
+                Tone.start().catch(e => console.error("Tone.js start failed:", e));
+            }
+            if (Tone.Transport.state !== 'started') {
+                 Tone.Transport.start();
+            }
+            
+            // 2. Determine Route
+            const routeType = $routeSelector.value;
+            const stations = [...STATIONS_LPI_TO_SC];
+            
+            if (routeType === 'SC_LPI') {
+                const totalDistance = stations[stations.length - 1].realKm;
+                gameState.routeStations = stations.reverse().map(s => ({
+                    name: s.name,
+                    realKm: totalDistance - s.realKm
+                }));
+            } else {
+                gameState.routeStations = stations;
+            }
+
+            // 3. Reset State and UI
+            gameState.currentSpeedKmH = 0;
+            gameState.currentDistanceM = gameState.routeStations[0].realKm * DISTANCE_SCALE;
+            gameState.throttleNotch = 0;
+            gameState.brakeNotch = 0;
+            gameState.currentStationIndex = 0;
+            gameState.lastProximityKm = null;
+            gameState.isSimulationRunning = true;
+
+            // 4. Update UI to Game Mode
+            $initialSetup.classList.add('hidden');
+            $dashboard.classList.remove('hidden');
+            $controlsSection.classList.remove('hidden');
+            $('throttle-up-button').disabled = false;
+            $('throttle-down-button').disabled = false;
+            $('brake-up-button').disabled = false;
+            $('brake-down-button').disabled = false;
+            $hornButton.disabled = false;
+            $resetButton.disabled = false;
+            
+            updateDisplay();
+
+            // 5. Start Game Loops
+            gameState.simLoopId = setInterval(gameLoop, UPDATE_INTERVAL_MS);
+            gameState.announcementLoopId = setInterval(controlRoomAnnouncement, ANNOUNCEMENT_INTERVAL_MS);
+
+            // Announce initial status
+            const destination = gameState.routeStations[gameState.routeStations.length - 1].name;
+            const nextStop = gameState.routeStations[gameState.currentStationIndex + 1] ? 
+                                 gameState.routeStations[gameState.currentStationIndex + 1].name : destination;
+            announce(`Simulation started. Route: ${gameState.routeStations[0].name} to ${destination}. Next stop is ${nextStop}.`);
+            $statusMessage.textContent = "Driving...";
+            
+            // Disable start button immediately after starting
+            $startButton.disabled = true; 
+        }
+
+        /**
+         * Main game physics loop.
+         */
+        function gameLoop() {
+            if (!gameState.isSimulationRunning) return;
+
+            // 1. Calculate Acceleration/Deceleration
+            let acceleration = 0;
+            
+            acceleration += gameState.throttleNotch * ACCELERATION_PER_NOTCH;
+            acceleration -= gameState.brakeNotch * DECELERATION_PER_NOTCH;
+            
+            if (gameState.throttleNotch === 0 && gameState.currentSpeedKmH > 0) {
+                acceleration -= COASTING_DECELERATION;
+            }
+
+            // 2. Update Speed
+            gameState.currentSpeedKmH = Math.max(0, gameState.currentSpeedKmH + acceleration);
+            gameState.currentSpeedKmH = Math.min(MAX_SPEED_KMH, gameState.currentSpeedKmH);
+
+            // 3. Update Distance
+            const timeElapsedHours = UPDATE_INTERVAL_MS / (1000 * 3600);
+            // Units: (km/h) * (sim_m / real_km) * h = sim_m
+            const simDistanceTraveledM = gameState.currentSpeedKmH * DISTANCE_SCALE * timeElapsedHours;
+            gameState.currentDistanceM += simDistanceTraveledM;
+
+            // 4. Check for Station Arrival
+            checkStationArrival();
+
+            // 5. Update UI and Audio
+            updateDisplay();
+            updateTractionSound();
+        }
+
+        /**
+         * Checks if the train has arrived at the next station.
+         */
+        function checkStationArrival() {
+            if (gameState.currentStationIndex >= gameState.routeStations.length - 1) {
+                return; // Already at the final destination
+            }
+
+            const nextStation = gameState.routeStations[gameState.currentStationIndex + 1];
+            const nextStationRealKm = nextStation.realKm;
+            
+            const distanceTraveledRealKm = gameState.currentDistanceM / DISTANCE_SCALE;
+            const distanceLeftRealKm = Math.max(0, nextStationRealKm - distanceTraveledRealKm);
+            gameState.nextStationDistanceKm = distanceLeftRealKm;
+
+            // Proximity Announcements (Last 15km down to 1km)
+            const proximityAlerts = [15, 10, 5, 3, 2, 1];
+            for (const km of proximityAlerts) {
+                if (distanceLeftRealKm <= km && (gameState.lastProximityKm === null || gameState.lastProximityKm > km)) {
+                    let announcementText = `Attention, ${nextStation.name} is ${km} kilometers away.`;
+                    if (km === 1) {
+                        announcementText = `Attention: ${nextStation.name} station zone will be coming in the next one kilometer. Prepare to brake.`;
+                    }
+                    announce(announcementText);
+                    gameState.lastProximityKm = km;
+                    break;
+                }
+            }
+
+
+            // Station Zone Check
+            const nextStationDistanceM = nextStationRealKm * DISTANCE_SCALE;
+            const distanceError = Math.abs(gameState.currentDistanceM - nextStationDistanceM);
+            const isStopped = gameState.currentSpeedKmH < 1; 
+
+            // UPDATED: Use the new radius constant for a more forgiving stop zone
+            const stationZoneRadiusM = STATION_ZONE_RADIUS_KM * DISTANCE_SCALE;
+
+            if (distanceError <= stationZoneRadiusM && isStopped) {
+                // SUCCESSFUL ARRIVAL
+                gameState.currentStationIndex++;
+                gameState.currentDistanceM = nextStationDistanceM; 
+
+                if (gameState.currentStationIndex === gameState.routeStations.length - 1) {
+                    finishGame(true, `SUCCESS! Final Destination: ${nextStation.name} arrived successfully!`);
+                } else {
+                    finishGame(false, `ARRIVED! Successfully stopped at ${nextStation.name}.`);
+                }
+
+            } else if (gameState.currentDistanceM > nextStationDistanceM + stationZoneRadiusM) {
+                // OVERSHOOT FAILURE
+                finishGame(true, `FAILURE! You overshot ${nextStation.name}. Stopping outside the station zone. Game Over.`);
+            }
+        }
+
+        /**
+         * Updates all display elements.
+         */
+        function updateDisplay() {
+            const currentStation = gameState.routeStations[gameState.currentStationIndex];
+            const nextStation = gameState.routeStations[gameState.currentStationIndex + 1];
+
+            $speedDisplay.textContent = Math.round(gameState.currentSpeedKmH);
+            $currentStationDisplay.textContent = currentStation ? currentStation.name : '--';
+            $distanceDisplay.textContent = nextStation ? gameState.nextStationDistanceKm.toFixed(2) : '0.00 (End)';
+        }
+
+        /**
+         * Control Room announcement every 10 seconds.
+         */
+        function controlRoomAnnouncement() {
+            if (!gameState.isSimulationRunning || gameState.currentStationIndex >= gameState.routeStations.length - 1) return;
+
+            const currentStation = gameState.routeStations[gameState.currentStationIndex].name;
+            const nextStation = gameState.routeStations[gameState.currentStationIndex + 1];
+            const speed = Math.round(gameState.currentSpeedKmH);
+
+            let announcement = `Current Status: `;
+            // Use "Departed from" for clarity
+            announcement += `Train departed from ${currentStation}. `;
+            announcement += `Current Speed is ${speed} kilometers per hour. `;
+
+            const distance = gameState.nextStationDistanceKm.toFixed(2);
+            announcement += `Next stop is ${nextStation.name}. Distance remaining: ${distance} kilometers.`;
+
+            announce(announcement);
+        }
+
+
+        /**
+         * Ends the simulation, either permanently (game over) or temporarily (intermediate stop).
+         * @param {boolean} isGameOver - True if the game is completely over.
+         * @param {string} message - Status message to display and announce.
+         */
+        function finishGame(isGameOver, message) {
+            clearInterval(gameState.simLoopId);
+            clearInterval(gameState.announcementLoopId);
+            gameState.isSimulationRunning = false;
+
+            // Stop all sounds via Tone.js volume ramp down
+            if (trackSynth) trackSynth.volume.rampTo(-30, 0.5);
+            if (brakeNoise) brakeNoise.volume.rampTo(-Infinity, 0.5);
+            $soundViz.style.width = '0%';
+            $soundViz.setAttribute('aria-valuenow', 0);
+
+
+            // Disable all controls
+            $('throttle-up-button').disabled = true;
+            $('throttle-down-button').disabled = true;
+            $('brake-up-button').disabled = true;
+            $('brake-down-button').disabled = true;
+            $hornButton.disabled = true;
+            // Note: Reset button remains enabled
+
+            $statusMessage.textContent = isGameOver ? "GAME OVER / SUCCESS" : "STOPPED / WAITING FOR DEPARTURE";
+            announce(message + (isGameOver ? " Please click RESET to start a new game." : " Click the DEPART button to proceed to the next station."));
+            
+            if (isGameOver) {
+                // Game is over. Show setup screen, hide controls.
+                $initialSetup.classList.remove('hidden');
+                $controlsSection.classList.add('hidden');
+                // Dashboard remains visible to show final stats until reset
+                
+                // UPDATED: Re-enable the start button so the user can play again
+                // This prevents the user from being soft-locked
+                $startButton.textContent = "Start Simulation";
+                $startButton.onclick = startGame;
+                $startButton.disabled = false;
+            } else {
+                // Intermediate stop. Show setup screen to show "DEPART" button
+                $initialSetup.classList.remove('hidden');
+                $controlsSection.classList.add('hidden'); // Hide controls during stop
+
+                // UPDATED: Correctly find the *next* station name
+                const nextStop = gameState.routeStations[gameState.currentStationIndex + 1];
+                const nextStopName = nextStop ? nextStop.name : 'Final Destination';
+                
+                $startButton.textContent = "DEPART to " + nextStopName;
+                $startButton.onclick = departToNextStation;
+                $startButton.disabled = false;
+            }
+        }
+
+        /**
+         * Logic for departing from an intermediate station.
+         */
+        function departToNextStation() {
+            // Note: currentStationIndex is already incremented in finishGame()
+            if (gameState.currentStationIndex >= gameState.routeStations.length) return;
+
+            // Reset state for departure
+            gameState.currentSpeedKmH = 0;
+            gameState.throttleNotch = 0;
+            gameState.brakeNotch = 0;
+            gameState.lastProximityKm = null;
+            gameState.isSimulationRunning = true;
+            
+            // Update UI/controls
+            $initialSetup.classList.add('hidden'); // Hide setup again
+            $controlsSection.classList.remove('hidden'); // Show controls
+            
+            // This button was just clicked, so disable it.
+            // It will be re-enabled by finishGame() or resetGame()
+            $startButton.textContent = "Start Simulation";
+            $startButton.onclick = startGame;
+            $startButton.disabled = true; 
+            
+            $('throttle-up-button').disabled = false;
+            $('throttle-down-button').disabled = false;
+            $('brake-up-button').disabled = false;
+            $('brake-down-button').disabled = false;
+            $hornButton.disabled = false;
+
+            // Restart loops
+            gameState.simLoopId = setInterval(gameLoop, UPDATE_INTERVAL_MS);
+            gameState.announcementLoopId = setInterval(controlRoomAnnouncement, ANNOUNCEMENT_INTERVAL_MS);
+            
+            const nextStopName = gameState.routeStations[gameState.currentStationIndex + 1].name;
+            announce(`Departure initiated. Next stop is ${nextStopName}. All clear, proceed.`);
+            $statusMessage.textContent = "Driving...";
+        }
+
+
+        /**
+         * Resets the entire game to the initial state.
+         */
+        function resetGame() {
+            clearInterval(gameState.simLoopId);
+            clearInterval(gameState.announcementLoopId);
+            gameState.isSimulationRunning = false;
+            
+            // Dispose of Tone.js synths and loop
+            if (trackSynth) trackSynth.dispose();
+            if (hornSynth) hornSynth.dispose();
+            if (brakeNoise) brakeNoise.dispose();
+            if (trackLoop) trackLoop.dispose();
+            
+            // Crucial Fix: Stop the Transport but DO NOT close the AudioContext
+            // Closing the context prevents it from being resumed (Tone.start)
+            Tone.Transport.stop(); 
+            
+            // Reset synths variables to null
+            trackSynth = null;
+            hornSynth = null;
+            brakeNoise = null;
+            trackLoop = null;
+
+            // Reset UI visibility
+            $initialSetup.classList.remove('hidden');
+            $dashboard.classList.add('hidden');
+            $controlsSection.classList.add('hidden');
+
+            // Reset visual elements
+            $throttleNotchDisplay.textContent = 'N0';
+            $brakeNotchDisplay.textContent = 'B0';
+            $soundViz.style.width = '0%';
+            $soundViz.setAttribute('aria-valuenow', 0);
+            $statusMessage.textContent = "Current Status: Waiting for Start.";
+            
+            // Re-enable start button and set initial text
+            $startButton.textContent = "Start Simulation";
+            $startButton.onclick = startGame;
+            $startButton.disabled = false;
+            
+            // Disable reset button until game starts
+            $resetButton.disabled = true;
+
+            announce("System reset. Please select a route to begin a new simulation.");
+        }
+        
+        // --- INITIALIZATION ---
+        window.onload = function() {
+            // Disable reset button on initial load
+             $resetButton.disabled = true;
+             announce("Simulator loaded. Click 'Start Simulation' to enable controls and audio.");
+        };
+        
+    </script>
+</body>
+</html>
